@@ -35,10 +35,24 @@ fn main() {
             std::fs::create_dir_all(&app_dir)?;
             let db_path = app_dir.join("tracksy.db");
             let pool = tauri::async_runtime::block_on(async {
-                SqlitePoolOptions::new()
+                let pool = SqlitePoolOptions::new()
                     .connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
                     .await
-                    .expect("failed to connect to database")
+                    .expect("failed to connect to database");
+
+                // Run migrations directly on our pool
+                let migration = include_str!("db/migrations/001_create_work_items.sql");
+                for statement in migration.split(';') {
+                    let stmt = statement.trim();
+                    if !stmt.is_empty() {
+                        sqlx::query(stmt)
+                            .execute(&pool)
+                            .await
+                            .expect("failed to run migration");
+                    }
+                }
+
+                pool
             });
             app.manage(pool);
 

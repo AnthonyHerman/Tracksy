@@ -1,4 +1,4 @@
-CREATE TABLE work_items (
+CREATE TABLE IF NOT EXISTS work_items (
   id          TEXT PRIMARY KEY,
   parent_id   TEXT REFERENCES work_items(id) ON DELETE SET NULL,
   title       TEXT NOT NULL,
@@ -11,6 +11,6 @@ CREATE TABLE work_items (
   deleted_at  TEXT
 );
 
-CREATE INDEX idx_work_items_parent  ON work_items(parent_id);
-CREATE INDEX idx_work_items_status  ON work_items(status);
-CREATE INDEX idx_work_items_deleted ON work_items(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_work_items_parent  ON work_items(parent_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_status  ON work_items(status);
+CREATE INDEX IF NOT EXISTS idx_work_items_deleted ON work_items(deleted_at);
