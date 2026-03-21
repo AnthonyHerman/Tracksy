@@ -12,6 +12,9 @@ serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 chrono = "0.4"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "time"] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
