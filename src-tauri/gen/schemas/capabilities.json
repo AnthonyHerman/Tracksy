@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capabilities for Tracksy","local":true,"windows":["main"],"permissions":["core:default","sql:default","positioner:default"]}}
