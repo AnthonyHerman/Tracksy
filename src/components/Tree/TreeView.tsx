@@ -2,10 +2,17 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useWorkItemStore } from "../../store/workItems";
 import { flattenVisibleTree } from "../../lib/tree";
-import { getAppendSortOrder } from "../../lib/fractional";
+import { getAppendSortOrder, getSortOrderBetween } from "../../lib/fractional";
 import { generateId } from "../../lib/uuid";
 import type { WorkItemStatus } from "../../types/workItem";
 import TreeItem from "./TreeItem";
+import type { DropPosition } from "./TreeItem";
+
+interface DragState {
+  dragId: string;
+  targetId: string | null;
+  position: DropPosition | null;
+}
 
 export default function TreeView() {
   const {
@@ -22,6 +29,7 @@ export default function TreeView() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,6 +106,75 @@ export default function TreeView() {
     setEditingId(null);
   }, []);
 
+  // --- Drag and drop ---
+
+  const handleDragStart = useCallback((id: string) => {
+    setDrag({ dragId: id, targetId: null, position: null });
+  }, []);
+
+  const handleDragOver = useCallback(
+    (targetId: string, position: DropPosition) => {
+      setDrag((prev) => {
+        if (!prev) return null;
+        // Only allow drops between siblings (same parent_id)
+        const dragItem = items.get(prev.dragId);
+        const targetItem = items.get(targetId);
+        if (!dragItem || !targetItem) return prev;
+        if (dragItem.parent_id !== targetItem.parent_id) return prev;
+        if (targetId === prev.dragId) return prev;
+        return { ...prev, targetId, position };
+      });
+    },
+    [items],
+  );
+
+  const handleDragLeave = useCallback(() => {
+    // Only clear target, keep dragId
+    setDrag((prev) => (prev ? { ...prev, targetId: null, position: null } : null));
+  }, []);
+
+  const handleDrop = useCallback(() => {
+    if (!drag?.targetId || !drag.position) return;
+
+    const dragItem = items.get(drag.dragId);
+    const targetItem = items.get(drag.targetId);
+    if (!dragItem || !targetItem) return;
+
+    // Get the ordered sibling list for this parent
+    const siblingIds =
+      dragItem.parent_id === null
+        ? rootIds
+        : childrenMap.get(dragItem.parent_id) ?? [];
+
+    // Build the sibling list without the dragged item
+    const withoutDrag = siblingIds.filter((id) => id !== drag.dragId);
+    const targetIdx = withoutDrag.indexOf(drag.targetId);
+    if (targetIdx === -1) return;
+
+    // Compute insertion index
+    const insertIdx =
+      drag.position === "before" ? targetIdx : targetIdx + 1;
+
+    // Get neighbor sort_orders
+    const before =
+      insertIdx > 0 ? items.get(withoutDrag[insertIdx - 1])!.sort_order : null;
+    const after =
+      insertIdx < withoutDrag.length
+        ? items.get(withoutDrag[insertIdx])!.sort_order
+        : null;
+
+    const newSortOrder = getSortOrderBetween(before, after);
+
+    updateWorkItem(drag.dragId, { sortOrder: newSortOrder });
+    setDrag(null);
+  }, [drag, items, rootIds, childrenMap, updateWorkItem]);
+
+  const handleDragEnd = useCallback(() => {
+    setDrag(null);
+  }, []);
+
+  // --- Render ---
+
   if (isLoading && items.size === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
@@ -141,6 +218,9 @@ export default function TreeView() {
               const childIds = childrenMap.get(node.id);
               const hasChildren = !!childIds && childIds.length > 0;
 
+              const isDropTarget = drag?.targetId === node.id;
+              const dropIndicator = isDropTarget ? drag.position : null;
+
               return (
                 <div
                   key={node.id}
@@ -159,12 +239,18 @@ export default function TreeView() {
                     hasChildren={hasChildren}
                     isExpanded={expanded.has(node.id)}
                     startEditing={editingId === node.id}
+                    dropIndicator={dropIndicator}
                     onToggleExpand={toggleExpand}
                     onUpdateTitle={handleUpdateTitle}
                     onUpdateStatus={handleUpdateStatus}
                     onDelete={handleDelete}
                     onAddChild={handleAddChild}
                     onEditingDone={handleEditingDone}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
                   />
                 </div>
               );
