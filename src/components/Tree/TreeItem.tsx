@@ -161,7 +161,7 @@ export default function TreeItem({
           className={`w-5 h-5 flex items-center justify-center text-gray-400 rounded hover:bg-gray-200 text-xs ${
             hasChildren ? "visible" : "invisible"
           }`}
-          onClick={() => onToggleExpand(item.id)}
+          onClick={(e) => { e.stopPropagation(); onToggleExpand(item.id); }}
         >
           {isExpanded ? "\u25BE" : "\u25B8"}
         </button>
@@ -202,6 +202,7 @@ export default function TreeItem({
             isDone ? "text-gray-400" : "text-gray-700"
           }`}
           value={item.status}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) =>
             onUpdateStatus(item.id, e.target.value as WorkItemStatus)
           }
@@ -218,7 +219,7 @@ export default function TreeItem({
           <button
             data-testid="tree-item-add-child-button"
             className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded text-sm"
-            onClick={() => onAddChild(item.id)}
+            onClick={(e) => { e.stopPropagation(); onAddChild(item.id); }}
             title="Add child"
           >
             +
@@ -226,7 +227,7 @@ export default function TreeItem({
           <button
             data-testid="tree-item-delete-button"
             className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded text-sm"
-            onClick={() => onDelete(item.id)}
+            onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
             title="Delete"
           >
             &times;
