@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useWorkItemStore } from "../../store/workItems";
 import { flattenVisibleTree } from "../../lib/tree";
@@ -7,6 +7,8 @@ import { generateId } from "../../lib/uuid";
 import type { WorkItemStatus } from "../../types/workItem";
 import TreeItem from "./TreeItem";
 import type { DropPosition } from "./TreeItem";
+import NotesPanel from "../NotesPanel";
+import type { TreeViewHandle } from "../../App";
 
 interface DragState {
   dragId: string;
@@ -14,7 +16,7 @@ interface DragState {
   position: DropPosition | null;
 }
 
-export default function TreeView() {
+export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   const {
     items,
     rootIds,
@@ -29,6 +31,7 @@ export default function TreeView() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +71,10 @@ export default function TreeView() {
     setEditingId(id);
   }, [rootIds, items, createWorkItem]);
 
+  useImperativeHandle(ref, () => ({
+    addRootItem: () => { handleAddRoot(); },
+  }), [handleAddRoot]);
+
   const handleAddChild = useCallback(
     async (parentId: string) => {
       const childIds = childrenMap.get(parentId) ?? [];
@@ -104,6 +111,25 @@ export default function TreeView() {
 
   const handleEditingDone = useCallback(() => {
     setEditingId(null);
+  }, []);
+
+  const handleSelect = useCallback((id: string) => {
+    setSelectedId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedId(null);
+  }, []);
+
+  const handleUpdateNotes = useCallback(
+    (id: string, notes: string) => {
+      updateWorkItem(id, { notes });
+    },
+    [updateWorkItem],
+  );
+
+  const handleDismissError = useCallback(() => {
+    useWorkItemStore.setState({ error: null });
   }, []);
 
   // --- Drag and drop ---
@@ -186,8 +212,15 @@ export default function TreeView() {
   return (
     <div className="flex flex-col h-full">
       {error && (
-        <div className="px-3 py-2 bg-red-50 text-red-700 text-sm border-b border-red-200">
-          {error}
+        <div className="flex items-center justify-between px-3 py-2 bg-red-50 text-red-700 text-sm border-b border-red-200">
+          <span>{error}</span>
+          <button
+            data-testid="error-dismiss"
+            className="text-red-400 hover:text-red-600 ml-2 text-sm"
+            onClick={handleDismissError}
+          >
+            &times;
+          </button>
         </div>
       )}
 
@@ -238,9 +271,11 @@ export default function TreeView() {
                     depth={node.depth}
                     hasChildren={hasChildren}
                     isExpanded={expanded.has(node.id)}
+                    isSelected={selectedId === node.id}
                     startEditing={editingId === node.id}
                     dropIndicator={dropIndicator}
                     onToggleExpand={toggleExpand}
+                    onSelect={handleSelect}
                     onUpdateTitle={handleUpdateTitle}
                     onUpdateStatus={handleUpdateStatus}
                     onDelete={handleDelete}
@@ -270,6 +305,14 @@ export default function TreeView() {
           </button>
         </div>
       )}
+
+      {selectedId && items.get(selectedId) && (
+        <NotesPanel
+          item={items.get(selectedId)!}
+          onUpdateNotes={handleUpdateNotes}
+          onClose={handleDeselectAll}
+        />
+      )}
     </div>
   );
-}
+});

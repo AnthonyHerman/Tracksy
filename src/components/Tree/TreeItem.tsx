@@ -9,9 +9,11 @@ interface TreeItemProps {
   depth: number;
   hasChildren: boolean;
   isExpanded: boolean;
+  isSelected: boolean;
   startEditing: boolean;
   dropIndicator: DropPosition | null;
   onToggleExpand: (id: string) => void;
+  onSelect: (id: string) => void;
   onUpdateTitle: (id: string, title: string) => void;
   onUpdateStatus: (id: string, status: WorkItemStatus) => void;
   onDelete: (id: string) => void;
@@ -37,9 +39,11 @@ export default function TreeItem({
   depth,
   hasChildren,
   isExpanded,
+  isSelected,
   startEditing,
   dropIndicator,
   onToggleExpand,
+  onSelect,
   onUpdateTitle,
   onUpdateStatus,
   onDelete,
@@ -145,7 +149,10 @@ export default function TreeItem({
         draggable={!isEditing}
         onDragStart={handleDragStart}
         onDragEnd={onDragEnd}
-        className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-100 rounded group cursor-grab active:cursor-grabbing"
+        onClick={() => onSelect(item.id)}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded group cursor-grab active:cursor-grabbing ${
+          isSelected ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-gray-100"
+        }`}
         style={{ paddingLeft: `${depth * 24 + 8}px` }}
       >
         {/* Expand/collapse toggle */}
