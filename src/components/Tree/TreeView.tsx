@@ -30,7 +30,13 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     rebalanceSiblings,
   } = useWorkItemStore();
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem("tracksy:expanded");
+      if (stored) return new Set(JSON.parse(stored) as string[]);
+    } catch { /* ignore corrupt data */ }
+    return new Set();
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -39,6 +45,10 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  useEffect(() => {
+    localStorage.setItem("tracksy:expanded", JSON.stringify([...expanded]));
+  }, [expanded]);
 
   const flatNodes = useMemo(
     () => flattenVisibleTree(rootIds, childrenMap, expanded),
