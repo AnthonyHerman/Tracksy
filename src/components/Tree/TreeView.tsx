@@ -40,7 +40,13 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [notesWidth, setNotesWidth] = useState<number>(() => {
+    const stored = localStorage.getItem("tracksy:notes-width");
+    return stored ? Number(stored) : 350;
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadTree();
@@ -49,6 +55,29 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   useEffect(() => {
     localStorage.setItem("tracksy:expanded", JSON.stringify([...expanded]));
   }, [expanded]);
+
+  // Persist notes panel width
+  useEffect(() => {
+    localStorage.setItem("tracksy:notes-width", String(notesWidth));
+  }, [notesWidth]);
+
+  // Resize handler for the divider
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = containerRect.right - e.clientX;
+      setNotesWidth(Math.max(200, Math.min(newWidth, containerRect.width - 200)));
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   const flatNodes = useMemo(
     () => flattenVisibleTree(rootIds, childrenMap, expanded),
@@ -229,109 +258,124 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     );
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      {error && (
-        <div className="flex items-center justify-between px-3 py-2 bg-red-50 text-red-700 text-sm border-b border-red-200">
-          <span>{error}</span>
-          <button
-            data-testid="error-dismiss"
-            className="text-red-400 hover:text-red-600 ml-2 text-sm"
-            onClick={handleDismissError}
-          >
-            &times;
-          </button>
-        </div>
-      )}
+  const showNotes = selectedId !== null && items.get(selectedId) !== undefined;
 
-      <div ref={scrollRef} className="flex-1 overflow-auto">
-        {flatNodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-3 py-12">
-            <p>No work items yet.</p>
+  return (
+    <div ref={containerRef} className="flex h-full" style={isResizing ? { userSelect: "none" } : undefined}>
+      {/* Left: Tree panel */}
+      <div className="flex flex-col flex-1 min-w-0 h-full">
+        {error && (
+          <div className="flex items-center justify-between px-3 py-2 bg-red-50 text-red-700 text-sm border-b border-red-200">
+            <span>{error}</span>
             <button
-              data-testid="root-add-item-button"
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-              onClick={handleAddRoot}
+              data-testid="error-dismiss"
+              className="text-red-400 hover:text-red-600 ml-2 text-sm"
+              onClick={handleDismissError}
             >
-              Add first item
+              &times;
             </button>
           </div>
-        ) : (
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              position: "relative",
-              width: "100%",
-            }}
-          >
-            {virtualizer.getVirtualItems().map((virtualItem) => {
-              const node = flatNodes[virtualItem.index];
-              const item = items.get(node.id);
-              if (!item) return null;
-              const childIds = childrenMap.get(node.id);
-              const hasChildren = !!childIds && childIds.length > 0;
+        )}
 
-              const isDropTarget = drag?.targetId === node.id;
-              const dropIndicator = isDropTarget ? drag.position : null;
+        <div ref={scrollRef} className="flex-1 overflow-auto">
+          {flatNodes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-3 py-12">
+              <p>No work items yet.</p>
+              <button
+                data-testid="root-add-item-button"
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                onClick={handleAddRoot}
+              >
+                Add first item
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const node = flatNodes[virtualItem.index];
+                const item = items.get(node.id);
+                if (!item) return null;
+                const childIds = childrenMap.get(node.id);
+                const hasChildren = !!childIds && childIds.length > 0;
 
-              return (
-                <div
-                  key={node.id}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <TreeItem
-                    item={item}
-                    depth={node.depth}
-                    hasChildren={hasChildren}
-                    isExpanded={expanded.has(node.id)}
-                    isSelected={selectedId === node.id}
-                    startEditing={editingId === node.id}
-                    dropIndicator={dropIndicator}
-                    onToggleExpand={toggleExpand}
-                    onSelect={handleSelect}
-                    onUpdateTitle={handleUpdateTitle}
-                    onUpdateStatus={handleUpdateStatus}
-                    onDelete={handleDelete}
-                    onAddChild={handleAddChild}
-                    onEditingDone={handleEditingDone}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                  />
-                </div>
-              );
-            })}
+                const isDropTarget = drag?.targetId === node.id;
+                const dropIndicator = isDropTarget ? drag.position : null;
+
+                return (
+                  <div
+                    key={node.id}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <TreeItem
+                      item={item}
+                      depth={node.depth}
+                      hasChildren={hasChildren}
+                      isExpanded={expanded.has(node.id)}
+                      isSelected={selectedId === node.id}
+                      startEditing={editingId === node.id}
+                      dropIndicator={dropIndicator}
+                      onToggleExpand={toggleExpand}
+                      onSelect={handleSelect}
+                      onUpdateTitle={handleUpdateTitle}
+                      onUpdateStatus={handleUpdateStatus}
+                      onDelete={handleDelete}
+                      onAddChild={handleAddChild}
+                      onEditingDone={handleEditingDone}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {flatNodes.length > 0 && (
+          <div className="border-t border-gray-200 px-3 py-2">
+            <button
+              data-testid="root-add-item-button"
+              className="text-sm text-gray-500 hover:text-blue-600"
+              onClick={handleAddRoot}
+            >
+              + Add item
+            </button>
           </div>
         )}
       </div>
 
-      {flatNodes.length > 0 && (
-        <div className="border-t border-gray-200 px-3 py-2">
-          <button
-            data-testid="root-add-item-button"
-            className="text-sm text-gray-500 hover:text-blue-600"
-            onClick={handleAddRoot}
-          >
-            + Add item
-          </button>
-        </div>
-      )}
-
-      {selectedId && items.get(selectedId) && (
-        <NotesPanel
-          item={items.get(selectedId)!}
-          onUpdateNotes={handleUpdateNotes}
-          onClose={handleDeselectAll}
-        />
+      {/* Right: Notes panel with resizable divider */}
+      {showNotes && (
+        <>
+          {/* Drag divider */}
+          <div
+            className="w-1 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
+          />
+          <div style={{ width: notesWidth }} className="shrink-0 h-full border-l border-gray-200">
+            <NotesPanel
+              item={items.get(selectedId!)!}
+              onUpdateNotes={handleUpdateNotes}
+              onClose={handleDeselectAll}
+            />
+          </div>
+        </>
       )}
     </div>
   );
