@@ -1,7 +1,7 @@
 {
   "productName": "Tracksy",
   "version": "0.1.0",
-  "identifier": "com.tracksy.app",
+  "identifier": "com.tracksy.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -22,13 +22,23 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "section": "utils",
+        "priority": "optional"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   }
 }

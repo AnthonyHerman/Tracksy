@@ -10,7 +10,7 @@ interface NotesPanelProps {
 export default function NotesPanel({ item, onUpdateNotes, onClose }: NotesPanelProps) {
   const [value, setValue] = useState(item.notes ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Reset value when item changes
   useEffect(() => {
