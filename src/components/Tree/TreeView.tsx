@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImper
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useWorkItemStore } from "../../store/workItems";
 import { flattenVisibleTree } from "../../lib/tree";
-import { getAppendSortOrder, getSortOrderBetween } from "../../lib/fractional";
+import { getAppendSortOrder, getSortOrderBetween, needsRebalance } from "../../lib/fractional";
 import { generateId } from "../../lib/uuid";
 import type { WorkItemStatus } from "../../types/workItem";
 import TreeItem from "./TreeItem";
@@ -27,6 +27,7 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     createWorkItem,
     updateWorkItem,
     deleteWorkItem,
+    rebalanceSiblings,
   } = useWorkItemStore();
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -191,9 +192,18 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
 
     const newSortOrder = getSortOrderBetween(before, after);
 
-    updateWorkItem(drag.dragId, { sortOrder: newSortOrder });
+    const parentId = dragItem.parent_id;
+    updateWorkItem(drag.dragId, { sortOrder: newSortOrder }).then(() => {
+      // Check if adjacent sort_orders are too close and need rebalancing
+      if (
+        (before !== null && needsRebalance(before, newSortOrder)) ||
+        (after !== null && needsRebalance(newSortOrder, after))
+      ) {
+        rebalanceSiblings(parentId);
+      }
+    });
     setDrag(null);
-  }, [drag, items, rootIds, childrenMap, updateWorkItem]);
+  }, [drag, items, rootIds, childrenMap, updateWorkItem, rebalanceSiblings]);
 
   const handleDragEnd = useCallback(() => {
     setDrag(null);

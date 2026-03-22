@@ -145,6 +145,45 @@ pub async fn fetch_all_live(pool: &SqlitePool) -> Result<Vec<WorkItem>, String> 
     .map_err(|e| format!("Database error: {}", e))
 }
 
+/// Reassign sort_order as 1.0, 2.0, 3.0, ... for all live siblings of a given parent.
+/// Pass `None` for root-level items.
+pub async fn rebalance_siblings(pool: &SqlitePool, parent_id: Option<&str>) -> Result<(), String> {
+    let siblings = match parent_id {
+        Some(pid) => {
+            sqlx::query_as::<_, WorkItem>(
+                "SELECT * FROM work_items WHERE parent_id = ? AND deleted_at IS NULL ORDER BY sort_order ASC",
+            )
+            .bind(pid)
+            .fetch_all(pool)
+            .await
+        }
+        None => {
+            sqlx::query_as::<_, WorkItem>(
+                "SELECT * FROM work_items WHERE parent_id IS NULL AND deleted_at IS NULL ORDER BY sort_order ASC",
+            )
+            .fetch_all(pool)
+            .await
+        }
+    }
+    .map_err(|e| format!("Database error: {}", e))?;
+
+    let now = now_utc();
+    for (i, sibling) in siblings.iter().enumerate() {
+        let new_order = (i + 1) as f64;
+        if (sibling.sort_order - new_order).abs() > f64::EPSILON {
+            sqlx::query("UPDATE work_items SET sort_order = ?, updated_at = ? WHERE id = ?")
+                .bind(new_order)
+                .bind(&now)
+                .bind(&sibling.id)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("Database error: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,6 +471,54 @@ mod tests {
         soft_delete_item(&pool, "id-1", &now_utc()).await.unwrap();
         let result = soft_delete_item(&pool, "id-1", &now_utc()).await;
         assert!(result.is_err(), "Second soft delete should fail");
+    }
+
+    // --- Rebalance siblings ---
+
+    #[tokio::test]
+    async fn rebalance_reassigns_integer_sort_orders() {
+        let pool = setup_pool().await;
+        // Create items with fractional sort_orders that need rebalancing
+        let a = make_item("a", "A", None, 1.0);
+        let b = make_item("b", "B", None, 1.5);
+        let c = make_item("c", "C", None, 1.75);
+        insert_item(&pool, &a).await.unwrap();
+        insert_item(&pool, &b).await.unwrap();
+        insert_item(&pool, &c).await.unwrap();
+
+        rebalance_siblings(&pool, None).await.unwrap();
+
+        let all = fetch_all_live(&pool).await.unwrap();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].id, "a");
+        assert_eq!(all[0].sort_order, 1.0);
+        assert_eq!(all[1].id, "b");
+        assert_eq!(all[1].sort_order, 2.0);
+        assert_eq!(all[2].id, "c");
+        assert_eq!(all[2].sort_order, 3.0);
+    }
+
+    #[tokio::test]
+    async fn rebalance_preserves_order_for_children() {
+        let pool = setup_pool().await;
+        let parent = make_item("p", "Parent", None, 1.0);
+        insert_item(&pool, &parent).await.unwrap();
+
+        let c1 = make_item("c1", "C1", Some("p"), 0.5);
+        let c2 = make_item("c2", "C2", Some("p"), 0.75);
+        insert_item(&pool, &c1).await.unwrap();
+        insert_item(&pool, &c2).await.unwrap();
+
+        rebalance_siblings(&pool, Some("p")).await.unwrap();
+
+        let c1_after = fetch_item(&pool, "c1").await.unwrap();
+        let c2_after = fetch_item(&pool, "c2").await.unwrap();
+        assert_eq!(c1_after.sort_order, 1.0);
+        assert_eq!(c2_after.sort_order, 2.0);
+
+        // Parent should be unchanged
+        let p_after = fetch_item(&pool, "p").await.unwrap();
+        assert_eq!(p_after.sort_order, 1.0);
     }
 
     // --- fetch_item does not return deleted items ---

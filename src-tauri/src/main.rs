@@ -110,6 +110,7 @@ fn main() {
             commands::work_items::update_work_item,
             commands::work_items::delete_work_item,
             commands::work_items::get_tree,
+            commands::work_items::rebalance_siblings,
             quit_app,
         ])
         .run(tauri::generate_context!())
