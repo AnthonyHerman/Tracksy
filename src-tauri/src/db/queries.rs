@@ -146,22 +146,24 @@ pub async fn fetch_all_live(pool: &SqlitePool) -> Result<Vec<WorkItem>, String> 
 }
 
 /// Reassign sort_order as 1.0, 2.0, 3.0, ... for all live siblings of a given parent.
-/// Pass `None` for root-level items.
+/// Pass `None` for root-level items. Runs in a transaction to prevent race conditions.
 pub async fn rebalance_siblings(pool: &SqlitePool, parent_id: Option<&str>) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| format!("Database error: {}", e))?;
+
     let siblings = match parent_id {
         Some(pid) => {
             sqlx::query_as::<_, WorkItem>(
                 "SELECT * FROM work_items WHERE parent_id = ? AND deleted_at IS NULL ORDER BY sort_order ASC",
             )
             .bind(pid)
-            .fetch_all(pool)
+            .fetch_all(&mut *tx)
             .await
         }
         None => {
             sqlx::query_as::<_, WorkItem>(
                 "SELECT * FROM work_items WHERE parent_id IS NULL AND deleted_at IS NULL ORDER BY sort_order ASC",
             )
-            .fetch_all(pool)
+            .fetch_all(&mut *tx)
             .await
         }
     }
@@ -175,12 +177,13 @@ pub async fn rebalance_siblings(pool: &SqlitePool, parent_id: Option<&str>) -> R
                 .bind(new_order)
                 .bind(&now)
                 .bind(&sibling.id)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await
                 .map_err(|e| format!("Database error: {}", e))?;
         }
     }
 
+    tx.commit().await.map_err(|e| format!("Database error: {}", e))?;
     Ok(())
 }
 
