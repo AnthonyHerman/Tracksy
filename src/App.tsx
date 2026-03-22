@@ -1,13 +1,23 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import TreeView from "./components/Tree/TreeView";
 
+export type TreeViewHandle = {
+  addRootItem: () => void;
+};
+
 function App() {
+  const treeRef = useRef<TreeViewHandle>(null);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "q") {
         e.preventDefault();
         invoke("quit_app");
+      }
+      if (e.ctrlKey && e.key === "n") {
+        e.preventDefault();
+        treeRef.current?.addRootItem();
       }
     };
     window.addEventListener("keydown", handler);
@@ -19,7 +29,7 @@ function App() {
         <h1 className="text-sm font-semibold text-gray-900">Tracksy</h1>
       </header>
       <main className="flex-1 overflow-hidden">
-        <TreeView />
+        <TreeView ref={treeRef} />
       </main>
     </div>
   );
