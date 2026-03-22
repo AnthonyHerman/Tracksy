@@ -12,8 +12,10 @@
     "tauri:dev": "WEBKIT_DISABLE_DMABUF_RENDERER=1 tauri dev"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-virtual": "^3.13.23",
     "@tauri-apps/api": "^2.10.1",
+    "marked": "^17.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "zod": "^4.3.6",
