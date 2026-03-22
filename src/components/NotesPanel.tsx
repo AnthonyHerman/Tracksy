@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import type { WorkItem } from "../types/workItem";
 
-// Configure marked: disable raw HTML input for safety
 marked.setOptions({ async: false });
 
 interface NotesPanelProps {
@@ -63,7 +63,8 @@ export default function NotesPanel({ item, onUpdateNotes, onClose }: NotesPanelP
 
   const renderedHtml = useMemo(() => {
     if (mode !== "preview" || !value) return "";
-    return marked.parse(value, { async: false }) as string;
+    const raw = marked.parse(value, { async: false }) as string;
+    return DOMPurify.sanitize(raw);
   }, [mode, value]);
 
   return (
