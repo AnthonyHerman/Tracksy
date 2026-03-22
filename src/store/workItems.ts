@@ -32,6 +32,7 @@ interface StoreActions {
     },
   ) => Promise<WorkItem>;
   deleteWorkItem: (id: string) => Promise<void>;
+  rebalanceSiblings: (parentId: string | null) => Promise<void>;
 }
 
 function buildDerivedState(items: Map<string, WorkItem>) {
@@ -146,6 +147,16 @@ export const useWorkItemStore = create<StoreState & StoreActions>((set, get) => 
     } catch (e) {
       set({ error: String(e) });
       throw e;
+    }
+  },
+
+  rebalanceSiblings: async (parentId) => {
+    try {
+      await invoke("rebalance_siblings", { parentId });
+      // Reload tree to pick up new sort_order values
+      await get().loadTree();
+    } catch (e) {
+      set({ error: String(e) });
     }
   },
 }));

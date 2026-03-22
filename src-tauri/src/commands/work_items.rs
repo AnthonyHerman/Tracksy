@@ -119,3 +119,11 @@ pub async fn delete_work_item(pool: State<'_, SqlitePool>, id: String) -> Result
 pub async fn get_tree(pool: State<'_, SqlitePool>) -> Result<Vec<WorkItem>, String> {
     queries::fetch_all_live(&pool).await
 }
+
+#[tauri::command]
+pub async fn rebalance_siblings(
+    pool: State<'_, SqlitePool>,
+    parent_id: Option<String>,
+) -> Result<(), String> {
+    queries::rebalance_siblings(&pool, parent_id.as_deref()).await
+}
