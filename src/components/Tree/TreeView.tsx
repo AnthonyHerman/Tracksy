@@ -67,6 +67,11 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     localStorage.setItem("tracksy:notes-width", String(notesWidth));
   }, [notesWidth]);
 
+  // Auto-select first root item if nothing is selected or selection is stale
+  const effectiveSelectedId = selectedId && items.get(selectedId) ? selectedId
+    : rootIds.length > 0 ? rootIds[0]
+    : null;
+
   // Sync auto-selected item back to state and localStorage
   useEffect(() => {
     if (effectiveSelectedId && effectiveSelectedId !== selectedId) {
@@ -273,12 +278,6 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     );
   }
 
-  // Auto-select first root item if nothing is selected or selection is stale
-  const effectiveSelectedId = (() => {
-    if (selectedId && items.get(selectedId)) return selectedId;
-    if (rootIds.length > 0) return rootIds[0];
-    return null;
-  })();
   const selectedItem = effectiveSelectedId ? items.get(effectiveSelectedId) : undefined;
 
   return (
