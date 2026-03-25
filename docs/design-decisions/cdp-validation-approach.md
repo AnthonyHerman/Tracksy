@@ -2,29 +2,42 @@
 
 ## Decision
 
-Use Node.js scripts with raw WebSocket connections to the WebKit Inspector Protocol
+Use Node.js scripts with WebSocket connections to the WebKit Inspector HTTP Server
 for all automated validation defined in SPEC.md § 12.
 
 ## Context
 
 SPEC.md requires that v0.1 completion is verified by automated CDP scripts that run
 against the live Tauri application without human inspection. On Linux, Tauri 2 uses
-WebKitGTK which exposes a WebKit Inspector endpoint (protocol-compatible with CDP for
-the operations we need) when `WEBKIT_INSPECTOR_SERVER` is set.
+WebKitGTK which exposes a WebKit Inspector endpoint when the appropriate environment
+variable is set.
+
+### WebKitGTK inspector variants
+
+WebKitGTK exposes two different inspector server modes:
+
+- `WEBKIT_INSPECTOR_SERVER` — uses a **custom binary GVariant protocol** over TCP.
+  No third-party clients exist for this protocol. Not usable.
+- `WEBKIT_INSPECTOR_HTTP_SERVER` — uses **HTTP + WebSocket**. The HTTP endpoint
+  serves an HTML page listing inspectable targets. Each target has a WebSocket URL
+  for the inspector protocol. **This is what we use.**
 
 ## Approach
 
-- **Connection**: Scripts connect to the WebKit Inspector Server via WebSocket. The
-  endpoint is discovered by querying `http://<host>:<port>/json/list`.
-- **Execution**: All test logic runs through `Runtime.evaluate`, executing JavaScript
-  in the Tauri WebView context. This gives access to both the DOM (for UI assertions)
-  and `window.__TAURI_INTERNALS__.invoke()` (for data layer assertions).
-- **Console monitoring**: `Console.enable` + `Runtime.enable` domains are activated on
-  connect to collect `console.error` calls for the zero-errors assertion.
-- **Reporting**: Each script outputs `PASS` / `FAIL` per assertion with evidence, and
-  exits with code 0 (all pass) or 1 (any failure).
-- **Runner**: `run-all.mjs` executes all numbered scripts sequentially and reports a
-  summary.
+- **Connection**: Scripts fetch `http://<host>:<port>/` to discover the WebSocket
+  path (parsed from the HTML), then connect via WebSocket.
+- **Target routing**: WebKitGTK's inspector uses a `Target.sendMessageToTarget` /
+  `Target.dispatchMessageFromTarget` multiplexing layer. All protocol commands are
+  wrapped in this outer envelope.
+- **Execution**: `Runtime.evaluate` executes JavaScript in the Tauri WebView context,
+  giving access to both the DOM and `window.__TAURI_INTERNALS__.invoke()`.
+- **Async workaround**: WebKit Inspector's `awaitPromise` parameter is non-functional
+  (always returns `{}`). Async expressions are executed via a global callback slot
+  and polled until the JSON-serialized result arrives.
+- **Console monitoring**: `Console.enable` is activated on the target to collect
+  `console.error` calls for the zero-errors assertion.
+- **Reporting**: Each script outputs `PASS` / `FAIL` per assertion with evidence.
+- **Runner**: `run-all.mjs` executes all numbered scripts sequentially.
 
 ## Dependencies
 
@@ -33,7 +46,7 @@ the operations we need) when `WEBKIT_INSPECTOR_SERVER` is set.
 ## Startup
 
 ```sh
-WEBKIT_INSPECTOR_SERVER=127.0.0.1:9222 cargo tauri dev
+WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9222 WEBKIT_DISABLE_DMABUF_RENDERER=1 cargo tauri dev
 # In a separate terminal:
 node tests/cdp/run-all.mjs
 ```
@@ -60,10 +73,11 @@ the absence of hard deletes cannot be proven by runtime observation alone.
 
 ## Alternatives considered
 
+- **WEBKIT_INSPECTOR_SERVER** (binary protocol): Uses a custom GVariant-over-TCP
+  binary protocol. No third-party clients exist. Unusable from Node.js.
 - **Playwright**: Would require launching a separate browser rather than connecting to
-  the Tauri WebView. Tauri IPC (`window.__TAURI_INTERNALS__`) is not available in an
-  external browser, so data layer tests would not work.
+  the Tauri WebView. Tauri IPC is not available in an external browser.
 - **tauri-driver (WebDriver)**: Viable but adds a Rust binary dependency and uses a
   different protocol than what the spec describes.
-- **puppeteer-core**: Chrome-specific CDP client; WebKitGTK uses the WebKit Inspector
-  Protocol which is similar but not identical.
+- **puppeteer-core**: Chrome-specific CDP client; incompatible with WebKit's target
+  multiplexing layer.

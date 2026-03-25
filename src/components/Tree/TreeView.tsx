@@ -38,7 +38,13 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     return new Set();
   });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      const stored = localStorage.getItem("tracksy:selected");
+      if (stored) return stored;
+    } catch { /* ignore corrupt data */ }
+    return null;
+  });
   const [drag, setDrag] = useState<DragState | null>(null);
   const [notesWidth, setNotesWidth] = useState<number>(() => {
     const stored = localStorage.getItem("tracksy:notes-width");
@@ -60,6 +66,19 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   useEffect(() => {
     localStorage.setItem("tracksy:notes-width", String(notesWidth));
   }, [notesWidth]);
+
+  // Auto-select first root item if nothing is selected or selection is stale
+  const effectiveSelectedId = selectedId && items.get(selectedId) ? selectedId
+    : rootIds.length > 0 ? rootIds[0]
+    : null;
+
+  // Sync auto-selected item back to state and localStorage
+  useEffect(() => {
+    if (effectiveSelectedId && effectiveSelectedId !== selectedId) {
+      setSelectedId(effectiveSelectedId);
+      localStorage.setItem("tracksy:selected", effectiveSelectedId);
+    }
+  }, [effectiveSelectedId, selectedId]);
 
   // Resize handler for the divider
   useEffect(() => {
@@ -154,7 +173,8 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
   }, []);
 
   const handleSelect = useCallback((id: string) => {
-    setSelectedId((prev) => (prev === id ? null : id));
+    setSelectedId(id);
+    localStorage.setItem("tracksy:selected", id);
   }, []);
 
   const handleDeselectAll = useCallback(() => {
@@ -258,7 +278,7 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
     );
   }
 
-  const showNotes = selectedId !== null && items.get(selectedId) !== undefined;
+  const selectedItem = effectiveSelectedId ? items.get(effectiveSelectedId) : undefined;
 
   return (
     <div ref={containerRef} className="flex h-full" style={isResizing ? { userSelect: "none" } : undefined}>
@@ -324,7 +344,7 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
                       depth={node.depth}
                       hasChildren={hasChildren}
                       isExpanded={expanded.has(node.id)}
-                      isSelected={selectedId === node.id}
+                      isSelected={effectiveSelectedId === node.id}
                       startEditing={editingId === node.id}
                       dropIndicator={dropIndicator}
                       onToggleExpand={toggleExpand}
@@ -360,23 +380,25 @@ export default forwardRef<TreeViewHandle>(function TreeView(_props, ref) {
         )}
       </div>
 
-      {/* Right: Notes panel with resizable divider */}
-      {showNotes && (
-        <>
-          {/* Drag divider */}
-          <div
-            className="w-1 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
-            onMouseDown={() => setIsResizing(true)}
+      {/* Right: Notes panel (always visible) with resizable divider */}
+      {/* Drag divider */}
+      <div
+        className="w-1 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
+        onMouseDown={() => setIsResizing(true)}
+      />
+      <div style={{ width: notesWidth }} className="shrink-0 h-full border-l border-gray-200">
+        {selectedItem ? (
+          <NotesPanel
+            item={selectedItem}
+            onUpdateNotes={handleUpdateNotes}
+            onClose={handleDeselectAll}
           />
-          <div style={{ width: notesWidth }} className="shrink-0 h-full border-l border-gray-200">
-            <NotesPanel
-              item={items.get(selectedId!)!}
-              onUpdateNotes={handleUpdateNotes}
-              onClose={handleDeselectAll}
-            />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+            Select an item to view notes
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 });
