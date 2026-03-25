@@ -13,8 +13,8 @@ requirement without human inspection.
 ## Running
 
 ```sh
-# Terminal 1: Start the app with inspector enabled
-WEBKIT_INSPECTOR_SERVER=127.0.0.1:9222 cargo tauri dev
+# Terminal 1: Start the app with the HTTP inspector server enabled
+WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9222 WEBKIT_DISABLE_DMABUF_RENDERER=1 cargo tauri dev
 
 # Terminal 2: Run all validation scripts
 node tests/cdp/run-all.mjs
@@ -22,6 +22,10 @@ node tests/cdp/run-all.mjs
 # Or run a single script
 node tests/cdp/01-create-root-item.mjs
 ```
+
+**Important**: Use `WEBKIT_INSPECTOR_HTTP_SERVER` (with `HTTP`), not
+`WEBKIT_INSPECTOR_SERVER`. The non-HTTP variant uses a binary protocol
+that Node.js cannot speak.
 
 ## Configuration
 
